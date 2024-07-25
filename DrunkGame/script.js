@@ -8,11 +8,11 @@ canvas.height = 400;
 
 // Загрузка изображений
 const duckImage = new Image();
-duckImage.src = 'assets/images/2dduck.png';
+duckImage.src = './assets/images/2dduck.png';
 const backgroundImage = new Image();
-backgroundImage.src = 'assets/images/oldtown.png';
+backgroundImage.src = './assets/images/oldtown.png';
 const bottleImage = new Image();
-bottleImage.src = 'assets/images/jager.png';
+bottleImage.src = './assets/images/jager.png';
 
 // Игровые переменные
 let duckX = 100;
@@ -38,8 +38,8 @@ let gameDesignPoints = 0;
 let vomitThreshold = 5; // Начальный порог для рвоты
 
 const duckFrames = [new Image(), new Image()];
-duckFrames[0].src = 'assets/images/2dduck_frame1.png';
-duckFrames[1].src = 'assets/images/2dduck_frame2.png';
+duckFrames[0].src = './assets/images/2dduck_frame1.png';
+duckFrames[1].src = './assets/images/2dduck_frame2.png';
 let currentFrame = 0;
 let frameCounter = 0;
 
