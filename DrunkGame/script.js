@@ -29,6 +29,19 @@ let bottles = [];
 let showHint = true;
 let splashes = [];
 
+let drunkLevel = 0;
+let lastDrinkTime = 0;
+let isVomiting = false;
+let vomitTimer = 0;
+let gameDesignPoints = 0;
+let vomitThreshold = 5; // Начальный порог для рвоты
+
+const duckFrames = [new Image(), new Image()];
+duckFrames[0].src = 'assets/images/2dduck_frame1.png';
+duckFrames[1].src = 'assets/images/2dduck_frame2.png';
+let currentFrame = 0;
+let frameCounter = 0;
+
 // Функция обновления игры
 function update() {
     // Очистка канваса
@@ -41,8 +54,21 @@ function update() {
         ctx.drawImage(backgroundImage, -bgX + backgroundImage.width, 0, backgroundImage.width, canvas.height);
     }
 
-    // Отрисовка уточки с обводкой
-    drawImageWithOutline(duckImage, duckX - cameraX, duckY, 80, 80);
+    // Анимация уточки
+    frameCounter++;
+    if (frameCounter >= 10) { // Меняем кадр каждые 10 обновлений
+        currentFrame = 1 - currentFrame;
+        frameCounter = 0;
+    }
+
+    // Отрисовка уточки с обводкой и анимацией
+    ctx.save();
+    if (drunkLevel > 0) {
+        ctx.fillStyle = `rgba(0, 255, 0, ${drunkLevel / 10})`;
+        ctx.fillRect(duckX - cameraX, duckY, 80, 80);
+    }
+    drawImageWithOutline(duckFrames[currentFrame], duckX - cameraX, duckY, 80, 80);
+    ctx.restore();
 
     // Отрисовка бутылок
     bottles.forEach(bottle => {
@@ -64,16 +90,28 @@ function update() {
         return splash.opacity > 0 && splash.size > 0;
     });
 
-    // Автоматическая ходьба
-    if (autoWalkSpeed > 0) {
+    // Обработка состояния опьянения и рвоты
+    if (isVomiting) {
+        vomitTimer--;
+        if (vomitTimer <= 0) {
+            isVomiting = false;
+        }
+        // Анимация рвоты
+        ctx.fillStyle = 'green';
+        ctx.beginPath();
+        ctx.arc(duckX - cameraX + 40, duckY + 90, 10, 0, Math.PI * 2);
+        ctx.fill();
+    } else if (autoWalkSpeed > 0) {
         moveForward(autoWalkSpeed);
     }
+
+    // Уменьшение уровня опьянения со временем
+    drunkLevel = Math.max(0, drunkLevel - 0.01);
 
     // Проверка столкновения с бутылками
     bottles = bottles.filter(bottle => {
         if (Math.abs((duckX + 40) - (bottle.x + 60)) < 80) {
-            currency += currencyPerBottle;
-            createSplashes(bottle.x, duckY - 20);
+            handleBottleCollision();
             return false;
         }
         return true;
@@ -89,6 +127,8 @@ function update() {
     ctx.font = 'bold 24px Arial';
     ctx.strokeText(`Бутылки: ${Math.round(displayedCurrency)}`, 10, 30);
     ctx.fillText(`Бутылки: ${Math.round(displayedCurrency)}`, 10, 30);
+    ctx.strokeText(`Геймдизайн: ${gameDesignPoints}`, 10, 60);
+    ctx.fillText(`Геймдизайн: ${gameDesignPoints}`, 10, 60);
 
     // Отображение подсказки
     if (showHint) {
@@ -111,14 +151,16 @@ function drawImageWithOutline(image, x, y, width, height) {
 }
 
 function moveForward(distance) {
-    duckX += distance;
-    cameraX += distance;
-    
-    steps++;
-    if (steps >= nextBottleIn) {
-        bottles.push({ x: duckX + canvas.width });
-        nextBottleIn = Math.floor(Math.random() * 5) + 3; // 3-7 шагов
-        steps = 0;
+    if (!isVomiting) {
+        duckX += distance;
+        cameraX += distance;
+        
+        steps++;
+        if (steps >= nextBottleIn) {
+            bottles.push({ x: duckX + canvas.width });
+            nextBottleIn = Math.floor(Math.random() * 5) + 3; // 3-7 шагов
+            steps = 0;
+        }
     }
 }
 
@@ -145,6 +187,12 @@ function spendCurrency(amount) {
     return false;
 }
 
+// Обновленная функция обработки столкновения с бутылкой
+function handleBottleCollision() {
+    const now = Date.now();
+    currency += currencyPerBottle;
+    createSplashes(duckX, duckY - 20);
+    drunkLevel = Math.min(10, drunkLevel + 1);
 // Обработчик нажатия клавиш
 document.addEventListener('keydown', (event) => {
     if (event.code === 'Space') {
