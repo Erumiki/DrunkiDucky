@@ -43,6 +43,17 @@ duckFrames[1].src = './assets/images/2dduck_frame2.png';
 let currentFrame = 0;
 let frameCounter = 0;
 
+const GROUND_LEVEL = 300; // Было 250, теперь 300
+
+// Определение констант и глобальных переменных
+const BOTTLE_SIZE = 90; // Размер бутылки
+const MIN_BOTTLE_DISTANCE = 200;
+const MAX_BOTTLE_DISTANCE = 400;
+
+let lastBottleX = 0;
+let glowIntensity = 0;
+let glowIncreasing = true;
+
 // Функция обновления игры
 function update() {
     // Очистка канваса
@@ -63,20 +74,10 @@ function update() {
     }
 
     // Отрисовка уточки с обводкой и анимацией
-    ctx.save();
-    if (drunkLevel > 0) {
-        ctx.fillStyle = `rgba(0, 255, 0, ${drunkLevel / 10})`;
-        ctx.fillRect(duckX - cameraX, duckY, 80, 80);
-    }
-    drawImageWithOutline(duckFrames[currentFrame], duckX - cameraX, duckY, 80, 80);
-    ctx.restore();
+    drawDuck();
 
     // Отрисовка бутылок
-    bottles.forEach(bottle => {
-        if (bottle.x - cameraX >= -60 && bottle.x - cameraX < canvas.width) {
-            drawImageWithOutline(bottleImage, bottle.x - cameraX, duckY - 20, 120, 60);
-        }
-    });
+    drawBottles();
 
     // Анимация брызг
     splashes = splashes.filter(splash => {
@@ -96,12 +97,10 @@ function update() {
         vomitTimer--;
         if (vomitTimer <= 0) {
             isVomiting = false;
+            gameDesignPoints++;
+            showGameDesignPointsAnimation();
         }
-        // Анимация рвоты
-        ctx.fillStyle = 'green';
-        ctx.beginPath();
-        ctx.arc(duckX - cameraX + 40, duckY + 90, 10, 0, Math.PI * 2);
-        ctx.fill();
+        drawVomit();
     } else if (autoWalkSpeed > 0) {
         moveForward(autoWalkSpeed);
     }
@@ -141,7 +140,67 @@ function update() {
         ctx.fillText('Нажмите пробел для движения', 10, canvas.height - 20);
     }
 
+    // Удаление бутылок, которые ушли далеко влево
+    bottles = bottles.filter(bottle => bottle.x > cameraX - 100);
+
     requestAnimationFrame(update);
+}
+
+function drawDuck() {
+    ctx.save();
+    if (drunkLevel > 0) {
+        const duckCanvas = document.createElement('canvas');
+        const duckCtx = duckCanvas.getContext('2d');
+        duckCanvas.width = 80;
+        duckCanvas.height = 80;
+
+        duckCtx.drawImage(duckFrames[currentFrame], 0, 0, 80, 80);
+
+        duckCtx.globalCompositeOperation = 'source-atop';
+        duckCtx.fillStyle = `rgba(0, 255, 0, ${drunkLevel / 10})`;
+        duckCtx.fillRect(0, 0, 80, 80);
+
+        duckCtx.globalCompositeOperation = 'source-over';
+        ctx.drawImage(duckCanvas, duckX - cameraX, duckY + 50); // Добавлено +50
+    } else {
+        ctx.drawImage(duckFrames[currentFrame], duckX - cameraX, duckY + 50, 80, 80); // Добавлено +50
+    }
+    ctx.restore();
+}
+
+function drawBottles() {
+    ctx.save(); // Сохраняем текущий контекст
+
+    // Обновляем интенсивность свечения
+    if (glowIncreasing) {
+        glowIntensity += 0.05;
+        if (glowIntensity >= 1) glowIncreasing = false;
+    } else {
+        glowIntensity -= 0.05;
+        if (glowIntensity <= 0) glowIncreasing = true;
+    }
+
+    bottles.forEach(bottle => {
+        const bottleScreenX = bottle.x - cameraX;
+
+        if (bottleScreenX >= -BOTTLE_SIZE && bottleScreenX <= canvas.width) {
+            // Рисуем свечение
+            const gradient = ctx.createRadialGradient(
+                bottleScreenX + BOTTLE_SIZE / 2, canvas.height - BOTTLE_SIZE / 2, 0,
+                bottleScreenX + BOTTLE_SIZE / 2, canvas.height - BOTTLE_SIZE / 2, BOTTLE_SIZE
+            );
+            gradient.addColorStop(0, `rgba(255, 255, 0, ${0.3 * glowIntensity})`);
+            gradient.addColorStop(1, 'rgba(255, 255, 0, 0)');
+            
+            ctx.fillStyle = gradient;
+            ctx.fillRect(bottleScreenX - BOTTLE_SIZE / 2, canvas.height - BOTTLE_SIZE * 1.5, BOTTLE_SIZE * 2, BOTTLE_SIZE * 2);
+
+            // Рисуем бутылку
+            ctx.drawImage(bottleImage, bottleScreenX, canvas.height - BOTTLE_SIZE - 20, BOTTLE_SIZE, BOTTLE_SIZE);
+        }
+    });
+
+    ctx.restore(); // Восстанавливаем исходный контекст
 }
 
 function drawImageWithOutline(image, x, y, width, height) {
@@ -156,13 +215,24 @@ function moveForward(distance) {
         duckX += distance;
         cameraX += distance;
         
-        steps++;
-        if (steps >= nextBottleIn) {
-            bottles.push({ x: duckX + canvas.width });
-            nextBottleIn = Math.floor(Math.random() * 5) + 3; // 3-7 шагов
-            steps = 0;
+        // Проверяем, нужно ли создать новую бутылку
+        if (duckX - lastBottleX >= MIN_BOTTLE_DISTANCE) {
+            createNewBottles();
         }
     }
+}
+
+function createNewBottles() {
+    const groupDistance = MIN_BOTTLE_DISTANCE + Math.random() * (MAX_BOTTLE_DISTANCE - MIN_BOTTLE_DISTANCE);
+    const bottleCount = Math.floor(Math.random() * 4) + 2; // От 2 до 5 бутылок
+    const groupStartX = lastBottleX + groupDistance;
+
+    for (let i = 0; i < bottleCount; i++) {
+        const bottleX = groupStartX + i * (BOTTLE_SIZE + 20); // 20 - расстояние между бутылками в группе
+        bottles.push({ x: bottleX });
+    }
+
+    lastBottleX = groupStartX + (bottleCount - 1) * (BOTTLE_SIZE + 20);
 }
 
 function createSplashes(x, y) {
@@ -197,32 +267,10 @@ function handleBottleCollision() {
     
     if (now - lastDrinkTime < 30000) { // 30 секунд
         if (drunkLevel >= vomitThreshold) {
-            isVomiting = true;
-            vomitTimer = 120; // 2 секунды при 60 FPS
-            gameDesignPoints++;
-            vomitThreshold += 2; // Увеличиваем порог для следующей рвоты
-            drunkLevel = 0;
+            vomit();
         }
-    } else {
-        vomitThreshold = Math.max(5, vomitThreshold - 1); // Уменьшаем порог, но не ниже 5
     }
-    
     lastDrinkTime = now;
-}
-
-// Обновляем функцию update для использования handleBottleCollision
-function update() {
-    // ... (остальной код функции update)
-
-    bottles = bottles.filter(bottle => {
-        if (Math.abs((duckX + 40) - (bottle.x + 60)) < 80) {
-            handleBottleCollision();
-            return false;
-        }
-        return true;
-    });
-
-    // ... (остальной код функции update)
 }
 
 // Обработчик нажатия клавиш
@@ -253,5 +301,76 @@ document.getElementById('upgradeAuto').addEventListener('click', () => {
     }
 });
 
-// Запуск игры
-update();
+// Функция инициализации бутылок
+function initializeBottles() {
+    lastBottleX = duckX + canvas.width; // Начальная позиция для первой группы бутылок
+    createNewBottles();
+}
+
+// Функция инициализации игры
+function initGame() {
+    initializeBottles();
+    
+    // Запуск игрового цикла
+    requestAnimationFrame(gameLoop);
+}
+
+// Игровой цикл
+function gameLoop(timestamp) {
+    update();
+    requestAnimationFrame(gameLoop);
+}
+
+// Запуск игры после загрузки всех ресурсов
+window.onload = function() {
+    bottleImage.onload = function() {
+        initGame();
+    };
+};
+
+function vomit() {
+    isVomiting = true;
+    drunkLevel = 0; // Сбрасываем уровень опьянения
+    vomitTimer = VOMIT_DURATION;
+    vomitSpots = [];
+    for (let i = 0; i < 10; i++) {
+        vomitSpots.push({
+            x: Math.random() * canvas.width,
+            y: Math.random() * canvas.height,
+            size: 20 + Math.random() * 30
+        });
+    }
+}
+
+let vomitSpots = [];
+let VOMIT_DURATION = 2000; // 2 секунды
+
+function drawVomit() {
+    ctx.fillStyle = 'rgba(255, 200, 0, 0.7)';
+    vomitSpots.forEach(spot => {
+        ctx.beginPath();
+        ctx.arc(spot.x, spot.y, spot.size, 0, Math.PI * 2);
+        ctx.fill();
+    });
+
+    const fontSize = 50 + Math.sin(Date.now() / 100) * 10;
+    ctx.font = `bold ${fontSize}px Arial`;
+    ctx.fillStyle = 'red';
+    ctx.textAlign = 'center';
+    ctx.fillText('ГЕЙМДИЗАЙН!!!', canvas.width / 2, canvas.height / 2);
+}
+
+function showGameDesignPointsAnimation() {
+    let animationTimer = 1000;
+    const animatePoints = () => {
+        ctx.font = 'bold 40px Arial';
+        ctx.fillStyle = `rgba(255, 255, 0, ${animationTimer / 1000})`;
+        ctx.textAlign = 'center';
+        ctx.fillText(`+1 ГЕЙМДИЗАЙН!`, canvas.width / 2, canvas.height / 2 - 100);
+        animationTimer -= 16;
+        if (animationTimer > 0) {
+            requestAnimationFrame(animatePoints);
+        }
+    };
+    animatePoints();
+}
