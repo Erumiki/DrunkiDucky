@@ -29,6 +29,7 @@ let bottles = [];
 let showHint = true;
 let splashes = [];
 
+// Добавленные переменные для опьянения и рвоты
 let drunkLevel = 0;
 let lastDrinkTime = 0;
 let isVomiting = false;
@@ -120,7 +121,7 @@ function update() {
     // Анимация изменения очков
     displayedCurrency += (currency - displayedCurrency) * 0.1;
 
-    // Отображение количества очков
+    // Отображение количества очков и очков геймдизайна
     ctx.fillStyle = 'white';
     ctx.strokeStyle = 'black';
     ctx.lineWidth = 3;
@@ -193,6 +194,37 @@ function handleBottleCollision() {
     currency += currencyPerBottle;
     createSplashes(duckX, duckY - 20);
     drunkLevel = Math.min(10, drunkLevel + 1);
+    
+    if (now - lastDrinkTime < 30000) { // 30 секунд
+        if (drunkLevel >= vomitThreshold) {
+            isVomiting = true;
+            vomitTimer = 120; // 2 секунды при 60 FPS
+            gameDesignPoints++;
+            vomitThreshold += 2; // Увеличиваем порог для следующей рвоты
+            drunkLevel = 0;
+        }
+    } else {
+        vomitThreshold = Math.max(5, vomitThreshold - 1); // Уменьшаем порог, но не ниже 5
+    }
+    
+    lastDrinkTime = now;
+}
+
+// Обновляем функцию update для использования handleBottleCollision
+function update() {
+    // ... (остальной код функции update)
+
+    bottles = bottles.filter(bottle => {
+        if (Math.abs((duckX + 40) - (bottle.x + 60)) < 80) {
+            handleBottleCollision();
+            return false;
+        }
+        return true;
+    });
+
+    // ... (остальной код функции update)
+}
+
 // Обработчик нажатия клавиш
 document.addEventListener('keydown', (event) => {
     if (event.code === 'Space') {
